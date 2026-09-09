@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yulia's Weights Log</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1C1B1A">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1C1B1A;
+    --surface: #262422;
+    --surface-2: #2E2B28;
+    --text: #F2EFE9;
+    --text-muted: #9B958C;
+    --accent: #C9A227;
+    --accent-dim: #8A701E;
+    --success: #7C9473;
+    --error: #C97757;
+    --border: #38352F;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+  }
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+    min-height: 100vh;
+  }
+  h1, h2, h3, .num {
+    font-family: 'Big Shoulders Display', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  #app { max-width: 480px; margin: 0 auto; padding: 20px 16px 100px; }
+
+  /* Header */
+  .app-header { padding: 18px 4px 22px; }
+  .app-header h1 {
+    font-size: 30px; margin: 0; line-height: 1;
+  }
+  .app-header .sub {
+    color: var(--text-muted); font-size: 14px; margin-top: 4px;
+  }
+
+  /* Search */
+  .search-wrap { position: relative; margin-bottom: 12px; }
+  input[type="text"], input[type="number"], input[type="date"] {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  .autocomplete-list {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    z-index: 20;
+    max-height: 240px;
+    overflow-y: auto;
+    display: none;
+  }
+  .autocomplete-list.open { display: block; }
+  .autocomplete-item {
+    padding: 12px 16px; font-size: 15px; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:active, .autocomplete-item.active { background: var(--surface); }
+
+  /* Buttons */
+  .btn {
+    display: block; width: 100%;
+    padding: 15px 18px;
+    border-radius: 10px;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--accent); color: #1C1B1A; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost { background: transparent; color: var(--text-muted); border: none; padding: 10px; }
+  .btn + .btn { margin-top: 10px; }
+  .btn:active { opacity: 0.85; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; margin-top: 0; }
+
+  .fab-row { margin-top: 18px; }
+
+  /* Cards / entries */
+  .entry-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .entry-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .entry-date { font-size: 13px; color: var(--text-muted); }
+  .entry-weight { font-size: 26px; }
+  .entry-meta { font-size: 14px; color: var(--text-muted); margin-top: 2px; }
+  .entry-actions { display: flex; gap: 16px; margin-top: 10px; }
+  .entry-actions button {
+    background: none; border: none; color: var(--text-muted);
+    font-size: 13px; font-family: 'Inter'; padding: 4px 0; cursor: pointer;
+  }
+  .entry-actions button.edit { color: var(--accent); }
+  .entry-actions button.delete { color: var(--error); }
+
+  /* Screens */
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .screen-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
+  }
+  .back-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); width: 40px; height: 40px; border-radius: 10px;
+    font-size: 18px; cursor: pointer; flex-shrink: 0;
+  }
+  .screen-title { font-size: 24px; margin: 0; }
+
+  /* Form */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 13px; color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center; padding: 50px 20px; color: var(--text-muted);
+  }
+  .empty-state .num { font-size: 40px; color: var(--border); }
+
+  /* Toast */
+  #toast {
+    position: fixed; left: 16px; right: 16px; bottom: 24px;
+    max-width: 448px; margin: 0 auto;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    transform: translateY(120%);
+    transition: transform 0.25s ease;
+    z-index: 100;
+  }
+  #toast.show { transform: translateY(0); }
+  #toast.success { border-color: var(--success); }
+  #toast.error { border-color: var(--error); }
+
+  /* Congrats banner */
+  .congrats {
+    background: var(--success); color: #1C1B1A;
+    padding: 14px 16px; border-radius: 10px;
+    font-weight: 600; margin-bottom: 16px;
+    display: none;
+  }
+  .congrats.show { display: block; }
+
+  /* Filter placeholder row */
+  .filter-row {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .filter-chip {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 13px; padding: 10px; border-radius: 8px;
+    text-align: center; opacity: 0.55;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <section id="screen-home" class="screen active">
+    <div class="app-header">
+      <h1>Yulia's Weights Log</h1>
+      <div class="sub">Track the iron, watch it climb.</div>
+    </div>
+
+    <div class="search-wrap">
+      <input type="text" id="home-search" placeholder="Search an exercise…" autocomplete="off">
+      <div class="autocomplete-list" id="home-autocomplete"></div>
+    </div>
+
+    <div class="fab-row">
+      <button class="btn btn-primary" id="btn-log-new">Log new exercise</button>
+      <button class="btn btn-secondary" id="btn-view-all">View all entries</button>
+    </div>
+  </section>
+
+  <!-- PROGRESSION -->
+  <section id="screen-progression" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" data-back="screen-home">←</button>
+      <h2 class="screen-title" id="progression-title">Exercise</h2>
+    </div>
+    <div id="progression-list"></div>
+  </section>
+
+  <!-- ALL ENTRIES -->
+  <section id="screen-all" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" data-back="screen-home">←</button>
+      <h2 class="screen-title">All entries</h2>
+    </div>
+    <div class="filter-row">
+      <div class="filter-chip">Date range</div>
+      <div class="filter-chip">Exercise</div>
+    </div>
+    <div id="all-list"></div>
+  </section>
+
+  <!-- LOG / EDIT FORM -->
+  <section id="screen-form" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" id="form-back">←</button>
+      <h2 class="screen-title" id="form-title">Log exercise</h2>
+    </div>
+
+    <div class="congrats" id="congrats-banner">🎉 First time logging this exercise — nice work adding it to your list.</div>
+
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="f-date">
+    </div>
+
+    <div class="field">
+      <label>Exercise</label>
+      <div class="search-wrap">
+        <input type="text" id="f-exercise" placeholder="Start typing…" autocomplete="off">
+        <div class="autocomplete-list" id="form-autocomplete"></div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Weight (kg)</label>
+        <input type="number" id="f-weight" inputmode="decimal" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Reps</label>
+        <input type="number" id="f-reps" inputmode="numeric" placeholder="0">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Sets</label>
+        <input type="number" id="f-sets" inputmode="numeric" placeholder="0">
+      </div>
+      <div class="field">
+        <label>Last set weight (optional)</label>
+        <input type="number" id="f-last-set" inputmode="decimal" placeholder="0">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <input type="text" id="f-notes" placeholder="Anything worth remembering">
+    </div>
+
+    <input type="hidden" id="f-id">
+
+    <div class="fab-row">
+      <button class="btn btn-primary" id="f-save">Save</button>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ---------- CONFIG ---------- */
+const API_URL = 'https://script.google.com/macros/s/AKfycbykMZpLT5_QaBda1LZ4h1-zz59e1CAohR-ph84Jvy6QaNeaYsS785AUPnE81ESTSGyH/exec';
+const API_TOKEN = 'IamfitandstrongIamfitandstrongIamfitandstrong'; // must match TOKEN in Code.gs
+
+/* ---------- STATE ---------- */
+let exerciseNames = [];
+let currentExercise = null;
+let formReturnScreen = 'screen-home';
+
+/* ---------- API HELPERS ---------- */
+async function apiGet(action, extraParams) {
+  const params = new URLSearchParams({ action, token: API_TOKEN, ...(extraParams || {}) });
+  const res = await fetch(`${API_URL}?${params.toString()}`);
+  return res.json();
+}
+
+async function apiPost(action, body) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // avoids CORS preflight against Apps Script
+    body: JSON.stringify({ action, token: API_TOKEN, ...body })
+  });
+  return res.json();
+}
+
+/* ---------- TOAST ---------- */
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (type ? ' ' + type : '');
+  setTimeout(() => { el.className = ''; }, 2800);
+}
+
+/* ---------- NAVIGATION ---------- */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+document.querySelectorAll('[data-back]').forEach(btn => {
+  btn.addEventListener('click', () => showScreen(btn.dataset.back));
+});
+
+/* ---------- EXERCISE NAMES / AUTOCOMPLETE ---------- */
+async function loadExerciseNames() {
+  const res = await apiGet('list_exercise_names');
+  if (res.ok) exerciseNames = res.data.exercise_names;
+}
+
+function wireAutocomplete(inputEl, listEl, onPick) {
+  inputEl.addEventListener('input', () => {
+    const q = inputEl.value.trim().toLowerCase();
+    if (!q) { listEl.classList.remove('open'); listEl.innerHTML = ''; return; }
+    const matches = exerciseNames.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
+    if (!matches.length) { listEl.classList.remove('open'); listEl.innerHTML = ''; return; }
+    listEl.innerHTML = matches.map(n => `<div class="autocomplete-item">${escapeHtml(n)}</div>`).join('');
+    listEl.classList.add('open');
+    [...listEl.children].forEach((item, i) => {
+      item.addEventListener('click', () => {
+        inputEl.value = matches[i];
+        listEl.classList.remove('open');
+        onPick(matches[i]);
+      });
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!listEl.contains(e.target) && e.target !== inputEl) listEl.classList.remove('open');
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- HOME SEARCH ---------- */
+const homeSearch = document.getElementById('home-search');
+const homeAutocomplete = document.getElementById('home-autocomplete');
+wireAutocomplete(homeSearch, homeAutocomplete, (name) => openProgression(name));
+
+document.getElementById('btn-log-new').addEventListener('click', () => openForm());
+document.getElementById('btn-view-all').addEventListener('click', () => openAllEntries());
+
+/* ---------- PROGRESSION VIEW ---------- */
+async function openProgression(exerciseName) {
+  currentExercise = exerciseName;
+  document.getElementById('progression-title').textContent = exerciseName;
+  showScreen('screen-progression');
+  const listEl = document.getElementById('progression-list');
+  listEl.innerHTML = '<div class="empty-state">Loading…</div>';
+  const res = await apiGet('get_progression', { exercise_name: exerciseName });
+  if (!res.ok) { toast(res.error || 'Could not load progression', 'error'); listEl.innerHTML = ''; return; }
+  renderEntries(listEl, res.data.entries, () => openProgression(exerciseName));
+}
+
+/* ---------- ALL ENTRIES VIEW ---------- */
+async function openAllEntries() {
+  showScreen('screen-all');
+  const listEl = document.getElementById('all-list');
+  listEl.innerHTML = '<div class="empty-state">Loading…</div>';
+  const res = await apiGet('list_all_entries');
+  if (!res.ok) { toast(res.error || 'Could not load entries', 'error'); listEl.innerHTML = ''; return; }
+  renderEntries(listEl, res.data.entries, () => openAllEntries());
+}
+
+/* ---------- SHARED ENTRY RENDERING ---------- */
+function renderEntries(container, entries, refreshFn) {
+  if (!entries.length) {
+    container.innerHTML = '<div class="empty-state"><div class="num">—</div>Nothing logged yet.</div>';
+    return;
+  }
+  container.innerHTML = entries.map(e => `
+    <div class="entry-card" data-id="${e.id}">
+      <div class="entry-top">
+        <div>
+          <div class="entry-date">${formatDate(e.date)}</div>
+          <div class="entry-weight">${e.weight_kg} kg <span style="font-size:14px;color:var(--text-muted);font-family:Inter">${e.exercise_name}</span></div>
+        </div>
+      </div>
+      <div class="entry-meta">${e.sets} sets × ${e.reps} reps${e.last_set_weight_kg ? ` · last set ${e.last_set_weight_kg} kg` : ''}</div>
+      ${e.notes ? `<div class="entry-meta">${escapeHtml(e.notes)}</div>` : ''}
+      <div class="entry-actions">
+        <button class="edit">Edit</button>
+        <button class="delete">Delete</button>
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.entry-card').forEach(card => {
+    const id = card.dataset.id;
+    const entry = entries.find(e => String(e.id) === String(id));
+    card.querySelector('.edit').addEventListener('click', () => openForm(entry));
+    card.querySelector('.delete').addEventListener('click', async () => {
+      if (!confirm(`Delete this ${entry.exercise_name} entry from ${formatDate(entry.date)}?`)) return;
+      const res = await apiPost('delete_entry', { id: entry.id });
+      if (res.ok) { toast('Entry deleted', 'success'); refreshFn(); }
+      else toast(res.error || 'Could not delete', 'error');
+    });
+  });
+}
+
+function formatDate(d) {
+  const dt = new Date(d);
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/* ---------- FORM (CREATE / EDIT) ---------- */
+const formExerciseInput = document.getElementById('f-exercise');
+const formAutocomplete = document.getElementById('form-autocomplete');
+wireAutocomplete(formExerciseInput, formAutocomplete, () => {});
+
+function openForm(entry) {
+  document.getElementById('congrats-banner').classList.remove('show');
+  formReturnScreen = document.querySelector('.screen.active').id;
+  document.getElementById('form-back').onclick = () => showScreen(formReturnScreen);
+
+  if (entry) {
+    document.getElementById('form-title').textContent = 'Edit exercise';
+    document.getElementById('f-id').value = entry.id;
+    document.getElementById('f-date').value = toInputDate(entry.date);
+    document.getElementById('f-exercise').value = entry.exercise_name;
+    document.getElementById('f-weight').value = entry.weight_kg;
+    document.getElementById('f-reps').value = entry.reps;
+    document.getElementById('f-sets').value = entry.sets;
+    document.getElementById('f-last-set').value = entry.last_set_weight_kg || '';
+    document.getElementById('f-notes').value = entry.notes || '';
+  } else {
+    document.getElementById('form-title').textContent = 'Log exercise';
+    document.getElementById('f-id').value = '';
+    document.getElementById('f-date').value = toInputDate(new Date());
+    document.getElementById('f-exercise').value = '';
+    document.getElementById('f-weight').value = '';
+    document.getElementById('f-reps').value = '';
+    document.getElementById('f-sets').value = '';
+    document.getElementById('f-last-set').value = '';
+    document.getElementById('f-notes').value = '';
+  }
+  showScreen('screen-form');
+}
+
+function toInputDate(d) {
+  const dt = (d instanceof Date) ? d : new Date(d);
+  if (isNaN(dt)) return '';
+  const yyyy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+document.getElementById('f-save').addEventListener('click', async () => {
+  const id = document.getElementById('f-id').value;
+  const date = document.getElementById('f-date').value;
+  const exercise_name = document.getElementById('f-exercise').value.trim();
+  const weight_kg = document.getElementById('f-weight').value;
+  const reps = document.getElementById('f-reps').value;
+  const sets = document.getElementById('f-sets').value;
+  const last_set_weight_kg = document.getElementById('f-last-set').value;
+  const notes = document.getElementById('f-notes').value.trim();
+
+  if (!date || !exercise_name || !weight_kg || !reps || !sets) {
+    toast('Fill in date, exercise, weight, reps, and sets', 'error');
+    return;
+  }
+
+  const isNewExercise = !exerciseNames.some(n => n.toLowerCase() === exercise_name.toLowerCase());
+  const payload = { date, exercise_name, weight_kg, reps, sets, last_set_weight_kg, notes };
+
+  let res;
+  try {
+    res = id
+      ? await apiPost('update_entry', { id, ...payload })
+      : await apiPost('create_entry', payload);
+  } catch (err) {
+    toast("Couldn't reach the server. Check your connection and try again.", 'error');
+    return;
+  }
+
+  if (!res.ok) { toast(res.error || 'Could not save', 'error'); return; }
+
+  if (!id && isNewExercise) {
+    exerciseNames.push(exercise_name);
+    document.getElementById('congrats-banner').classList.add('show');
+    toast('First time logging ' + exercise_name + ' 🎉', 'success');
+    setTimeout(() => showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen), 1400);
+  } else {
+    toast(id ? 'Entry updated' : 'Entry saved', 'success');
+    showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen);
+  }
+
+  if (formReturnScreen === 'screen-progression' && currentExercise) openProgression(currentExercise);
+  if (formReturnScreen === 'screen-all') openAllEntries();
+});
+
+/* ---------- INIT ---------- */
+loadExerciseNames();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
