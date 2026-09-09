@@ -176,14 +176,33 @@
   #toast.success { border-color: var(--success); }
   #toast.error { border-color: var(--error); }
 
-  /* Congrats banner */
-  .congrats {
-    background: var(--success); color: #1C1B1A;
-    padding: 14px 16px; border-radius: 10px;
-    font-weight: 600; margin-bottom: 16px;
+  /* Congrats popup */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
     display: none;
+    align-items: center; justify-content: center;
+    z-index: 200;
+    padding: 24px;
   }
-  .congrats.show { display: block; }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--success); color: #1C1B1A;
+    border-radius: 14px;
+    padding: 28px 24px;
+    text-align: center;
+    max-width: 320px;
+    font-weight: 600;
+    font-size: 17px;
+    transform: scale(0.92);
+    opacity: 0;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .modal-overlay.show .modal-box {
+    transform: scale(1);
+    opacity: 1;
+  }
+  .modal-box .modal-emoji { font-size: 34px; display: block; margin-bottom: 8px; }
 
   /* Filter placeholder row */
   .filter-row {
@@ -203,7 +222,7 @@
   <section id="screen-home" class="screen active">
     <div class="app-header">
       <h1>Yulia's Weights Log</h1>
-      <div class="sub">Oy with the poodles already</div>
+      <div class="sub">Yes!</div>
     </div>
 
     <div class="search-wrap">
@@ -245,8 +264,6 @@
       <button class="back-btn" id="form-back">←</button>
       <h2 class="screen-title" id="form-title">Log exercise</h2>
     </div>
-
-    <div class="congrats" id="congrats-banner">🎉 First time logging this exercise — nice work adding it to your list.</div>
 
     <div class="field">
       <label>Date</label>
@@ -299,10 +316,17 @@
 
 <div id="toast"></div>
 
+<div class="modal-overlay" id="congrats-modal">
+  <div class="modal-box">
+    <span class="modal-emoji">🎉</span>
+    <span id="congrats-modal-text">First time logging this exercise — nice work adding it to your list.</span>
+  </div>
+</div>
+
 <script>
 /* ---------- CONFIG ---------- */
 const API_URL = 'https://script.google.com/macros/s/AKfycbykMZpLT5_QaBda1LZ4h1-zz59e1CAohR-ph84Jvy6QaNeaYsS785AUPnE81ESTSGyH/exec';
-const API_TOKEN = 'IamfitandstrongIamfitandstrongIamfitandstrong'; // must match TOKEN in Code.gs
+const API_TOKEN = 'REPLACE_WITH_YOUR_OWN_SECRET_TOKEN'; // must match TOKEN in Code.gs
 
 /* ---------- STATE ---------- */
 let exerciseNames = [];
@@ -324,6 +348,23 @@ async function apiPost(action, body) {
   });
   return res.json();
 }
+
+/* ---------- CONGRATS POPUP ---------- */
+const congratsModal = document.getElementById('congrats-modal');
+const congratsModalText = document.getElementById('congrats-modal-text');
+let congratsTimer = null;
+
+function showCongratsPopup(exerciseName) {
+  congratsModalText.textContent = `First time logging ${exerciseName} — nice work adding it to your list.`;
+  congratsModal.classList.add('show');
+  clearTimeout(congratsTimer);
+  congratsTimer = setTimeout(hideCongratsPopup, 4000);
+}
+function hideCongratsPopup() {
+  congratsModal.classList.remove('show');
+  clearTimeout(congratsTimer);
+}
+congratsModal.addEventListener('click', hideCongratsPopup);
 
 /* ---------- TOAST ---------- */
 function toast(msg, type) {
@@ -451,7 +492,7 @@ const formAutocomplete = document.getElementById('form-autocomplete');
 wireAutocomplete(formExerciseInput, formAutocomplete, () => {});
 
 function openForm(entry) {
-  document.getElementById('congrats-banner').classList.remove('show');
+  hideCongratsPopup();
   formReturnScreen = document.querySelector('.screen.active').id;
   document.getElementById('form-back').onclick = () => showScreen(formReturnScreen);
 
@@ -520,9 +561,8 @@ document.getElementById('f-save').addEventListener('click', async () => {
 
   if (!id && isNewExercise) {
     exerciseNames.push(exercise_name);
-    document.getElementById('congrats-banner').classList.add('show');
-    toast('First time logging ' + exercise_name + ' 🎉', 'success');
-    setTimeout(() => showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen), 1400);
+    showCongratsPopup(exercise_name);
+    setTimeout(() => showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen), 4000);
   } else {
     toast(id ? 'Entry updated' : 'Entry saved', 'success');
     showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen);
