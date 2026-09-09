@@ -56,6 +56,15 @@
 
   /* Search */
   .search-wrap { position: relative; margin-bottom: 12px; }
+  .search-wrap input[type="text"] { padding-right: 44px; }
+  .search-clear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--surface-2); border: none; color: var(--text-muted);
+    font-size: 18px; line-height: 1; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+  }
+  .search-clear.show { display: flex; }
   input[type="text"], input[type="number"], input[type="date"] {
     width: 100%;
     background: var(--surface);
@@ -222,11 +231,12 @@
   <section id="screen-home" class="screen active">
     <div class="app-header">
       <h1>Yulia's Weights Log</h1>
-      <div class="sub">Yes!</div>
+      <div class="sub">Track the iron, watch it climb.</div>
     </div>
 
     <div class="search-wrap">
       <input type="text" id="home-search" placeholder="Search an exercise…" autocomplete="off">
+      <button class="search-clear" id="home-search-clear" aria-label="Clear search">×</button>
       <div class="autocomplete-list" id="home-autocomplete"></div>
     </div>
 
@@ -241,6 +251,9 @@
     <div class="screen-header">
       <button class="back-btn" data-back="screen-home">←</button>
       <h2 class="screen-title" id="progression-title">Exercise</h2>
+    </div>
+    <div class="fab-row" style="margin-bottom:16px; margin-top:0;">
+      <button class="btn btn-secondary" id="btn-log-from-progression">Log new entry for this exercise</button>
     </div>
     <div id="progression-list"></div>
   </section>
@@ -417,10 +430,25 @@ function escapeHtml(str) {
 /* ---------- HOME SEARCH ---------- */
 const homeSearch = document.getElementById('home-search');
 const homeAutocomplete = document.getElementById('home-autocomplete');
+const homeSearchClear = document.getElementById('home-search-clear');
 wireAutocomplete(homeSearch, homeAutocomplete, (name) => openProgression(name));
+
+homeSearch.addEventListener('input', () => {
+  homeSearchClear.classList.toggle('show', homeSearch.value.length > 0);
+});
+homeSearchClear.addEventListener('click', () => {
+  homeSearch.value = '';
+  homeSearchClear.classList.remove('show');
+  homeAutocomplete.classList.remove('open');
+  homeAutocomplete.innerHTML = '';
+  homeSearch.focus();
+});
 
 document.getElementById('btn-log-new').addEventListener('click', () => openForm());
 document.getElementById('btn-view-all').addEventListener('click', () => openAllEntries());
+document.getElementById('btn-log-from-progression').addEventListener('click', () => {
+  openForm({ exercise_name: currentExercise });
+});
 
 /* ---------- PROGRESSION VIEW ---------- */
 async function openProgression(exerciseName) {
@@ -441,11 +469,11 @@ async function openAllEntries() {
   listEl.innerHTML = '<div class="empty-state">Loading…</div>';
   const res = await apiGet('list_all_entries');
   if (!res.ok) { toast(res.error || 'Could not load entries', 'error'); listEl.innerHTML = ''; return; }
-  renderEntries(listEl, res.data.entries, () => openAllEntries());
+  renderEntries(listEl, res.data.entries, () => openAllEntries(), true);
 }
 
 /* ---------- SHARED ENTRY RENDERING ---------- */
-function renderEntries(container, entries, refreshFn) {
+function renderEntries(container, entries, refreshFn, emphasizeExercise) {
   if (!entries.length) {
     container.innerHTML = '<div class="empty-state"><div class="num">—</div>Nothing logged yet.</div>';
     return;
@@ -455,7 +483,9 @@ function renderEntries(container, entries, refreshFn) {
       <div class="entry-top">
         <div>
           <div class="entry-date">${formatDate(e.date)}</div>
-          <div class="entry-weight">${e.weight_kg} kg <span style="font-size:14px;color:var(--text-muted);font-family:Inter">${e.exercise_name}</span></div>
+          ${emphasizeExercise
+            ? `<div class="entry-weight">${escapeHtml(e.exercise_name)}</div><div class="entry-meta" style="margin-top:2px">${e.weight_kg} kg</div>`
+            : `<div class="entry-weight">${e.weight_kg} kg <span style="font-size:14px;color:var(--text-muted);font-family:Inter">${escapeHtml(e.exercise_name)}</span></div>`}
         </div>
       </div>
       <div class="entry-meta">${e.sets} sets × ${e.reps} reps${e.last_set_weight_kg ? ` · last set ${e.last_set_weight_kg} kg` : ''}</div>
@@ -496,7 +526,7 @@ function openForm(entry) {
   formReturnScreen = document.querySelector('.screen.active').id;
   document.getElementById('form-back').onclick = () => showScreen(formReturnScreen);
 
-  if (entry) {
+  if (entry && entry.id) {
     document.getElementById('form-title').textContent = 'Edit exercise';
     document.getElementById('f-id').value = entry.id;
     document.getElementById('f-date').value = toInputDate(entry.date);
@@ -510,7 +540,7 @@ function openForm(entry) {
     document.getElementById('form-title').textContent = 'Log exercise';
     document.getElementById('f-id').value = '';
     document.getElementById('f-date').value = toInputDate(new Date());
-    document.getElementById('f-exercise').value = '';
+    document.getElementById('f-exercise').value = (entry && entry.exercise_name) || '';
     document.getElementById('f-weight').value = '';
     document.getElementById('f-reps').value = '';
     document.getElementById('f-sets').value = '';
