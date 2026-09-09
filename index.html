@@ -222,6 +222,35 @@
     color: var(--text-muted); font-size: 13px; padding: 10px; border-radius: 8px;
     text-align: center; opacity: 0.55;
   }
+
+  /* Startup loading overlay */
+  #loading-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px;
+    z-index: 300;
+    transition: opacity 0.3s ease;
+  }
+  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 34px; height: 34px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-overlay .loading-text { color: var(--text-muted); font-size: 14px; }
+  #loading-overlay .retry-btn {
+    display: none;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    padding: 10px 18px; border-radius: 8px; font-family: 'Inter'; font-size: 14px;
+    cursor: pointer; margin-top: 4px;
+  }
+  #loading-overlay.error .loading-text { color: var(--error); }
+  #loading-overlay.error .spinner { display: none; }
+  #loading-overlay.error .retry-btn { display: block; }
 </style>
 </head>
 <body>
@@ -327,6 +356,12 @@
 
 </div>
 
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading your log…</div>
+  <button class="retry-btn" id="loading-retry">Try again</button>
+</div>
+
 <div id="toast"></div>
 
 <div class="modal-overlay" id="congrats-modal">
@@ -344,7 +379,6 @@ const API_TOKEN = 'IamfitandstrongIamfitandstrongIamfitandstrong'; // must match
 /* ---------- STATE ---------- */
 let exerciseNames = [];
 let currentExercise = null;
-let formReturnScreen = 'screen-home';
 
 /* ---------- API HELPERS ---------- */
 async function apiGet(action, extraParams) {
@@ -393,13 +427,54 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 document.querySelectorAll('[data-back]').forEach(btn => {
-  btn.addEventListener('click', () => showScreen(btn.dataset.back));
+  btn.addEventListener('click', () => history.back());
+});
+document.getElementById('form-back').addEventListener('click', () => history.back());
+
+// Every forward navigation pushes a history entry. The home screen is the
+// baseline (no pushed entry), so pressing back from home has nothing left
+// to pop and exits the app, while pressing back anywhere else — via the
+// on-screen arrow or the phone's own back button — returns to whichever
+// screen was open before, since both trigger the same popstate handler.
+function goToProgression(exerciseName) {
+  history.pushState({ screen: 'progression', exercise: exerciseName }, '');
+  renderProgression(exerciseName);
+}
+function goToAllEntries() {
+  history.pushState({ screen: 'all' }, '');
+  renderAllEntries();
+}
+function goToForm(entry) {
+  history.pushState({ screen: 'form', entryId: entry && entry.id, exerciseName: entry && entry.exercise_name }, '');
+  renderForm(entry);
+}
+
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  if (!state) { showScreen('screen-home'); return; }
+  if (state.screen === 'progression') renderProgression(state.exercise);
+  else if (state.screen === 'all') renderAllEntries();
+  else if (state.screen === 'form') {
+    const entry = state.entryId
+      ? allEntriesCache.find(en => String(en.id) === String(state.entryId))
+      : (state.exerciseName ? { exercise_name: state.exerciseName } : null);
+    renderForm(entry);
+  }
 });
 
-/* ---------- EXERCISE NAMES / AUTOCOMPLETE ---------- */
+/* ---------- EXERCISE NAMES / ENTRIES CACHE ---------- */
+let allEntriesCache = [];
+
 async function loadExerciseNames() {
   const res = await apiGet('list_exercise_names');
-  if (res.ok) exerciseNames = res.data.exercise_names;
+  if (!res.ok) throw new Error(res.error || 'Failed to load exercise names');
+  exerciseNames = res.data.exercise_names;
+}
+
+async function loadAllEntriesCache() {
+  const res = await apiGet('list_all_entries');
+  if (!res.ok) throw new Error(res.error || 'Failed to load entries');
+  allEntriesCache = res.data.entries;
 }
 
 function wireAutocomplete(inputEl, listEl, onPick) {
@@ -431,7 +506,7 @@ function escapeHtml(str) {
 const homeSearch = document.getElementById('home-search');
 const homeAutocomplete = document.getElementById('home-autocomplete');
 const homeSearchClear = document.getElementById('home-search-clear');
-wireAutocomplete(homeSearch, homeAutocomplete, (name) => openProgression(name));
+wireAutocomplete(homeSearch, homeAutocomplete, (name) => goToProgression(name));
 
 homeSearch.addEventListener('input', () => {
   homeSearchClear.classList.toggle('show', homeSearch.value.length > 0);
@@ -444,32 +519,30 @@ homeSearchClear.addEventListener('click', () => {
   homeSearch.focus();
 });
 
-document.getElementById('btn-log-new').addEventListener('click', () => openForm());
-document.getElementById('btn-view-all').addEventListener('click', () => openAllEntries());
+document.getElementById('btn-log-new').addEventListener('click', () => goToForm());
+document.getElementById('btn-view-all').addEventListener('click', () => goToAllEntries());
 document.getElementById('btn-log-from-progression').addEventListener('click', () => {
-  openForm({ exercise_name: currentExercise });
+  goToForm({ exercise_name: currentExercise });
 });
 
 /* ---------- PROGRESSION VIEW ---------- */
-async function openProgression(exerciseName) {
+function renderProgression(exerciseName) {
   currentExercise = exerciseName;
   document.getElementById('progression-title').textContent = exerciseName;
   showScreen('screen-progression');
   const listEl = document.getElementById('progression-list');
-  listEl.innerHTML = '<div class="empty-state">Loading…</div>';
-  const res = await apiGet('get_progression', { exercise_name: exerciseName });
-  if (!res.ok) { toast(res.error || 'Could not load progression', 'error'); listEl.innerHTML = ''; return; }
-  renderEntries(listEl, res.data.entries, () => openProgression(exerciseName));
+  const entries = allEntriesCache
+    .filter(e => e.exercise_name === exerciseName)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  renderEntries(listEl, entries, () => renderProgression(exerciseName));
 }
 
 /* ---------- ALL ENTRIES VIEW ---------- */
-async function openAllEntries() {
+function renderAllEntries() {
   showScreen('screen-all');
   const listEl = document.getElementById('all-list');
-  listEl.innerHTML = '<div class="empty-state">Loading…</div>';
-  const res = await apiGet('list_all_entries');
-  if (!res.ok) { toast(res.error || 'Could not load entries', 'error'); listEl.innerHTML = ''; return; }
-  renderEntries(listEl, res.data.entries, () => openAllEntries(), true);
+  const entries = [...allEntriesCache].sort((a, b) => new Date(b.date) - new Date(a.date));
+  renderEntries(listEl, entries, () => renderAllEntries(), true);
 }
 
 /* ---------- SHARED ENTRY RENDERING ---------- */
@@ -500,12 +573,17 @@ function renderEntries(container, entries, refreshFn, emphasizeExercise) {
   container.querySelectorAll('.entry-card').forEach(card => {
     const id = card.dataset.id;
     const entry = entries.find(e => String(e.id) === String(id));
-    card.querySelector('.edit').addEventListener('click', () => openForm(entry));
+    card.querySelector('.edit').addEventListener('click', () => goToForm(entry));
     card.querySelector('.delete').addEventListener('click', async () => {
       if (!confirm(`Delete this ${entry.exercise_name} entry from ${formatDate(entry.date)}?`)) return;
       const res = await apiPost('delete_entry', { id: entry.id });
-      if (res.ok) { toast('Entry deleted', 'success'); refreshFn(); }
-      else toast(res.error || 'Could not delete', 'error');
+      if (res.ok) {
+        allEntriesCache = allEntriesCache.filter(e => String(e.id) !== String(entry.id));
+        toast('Entry deleted', 'success');
+        refreshFn();
+      } else {
+        toast(res.error || 'Could not delete', 'error');
+      }
     });
   });
 }
@@ -521,10 +599,8 @@ const formExerciseInput = document.getElementById('f-exercise');
 const formAutocomplete = document.getElementById('form-autocomplete');
 wireAutocomplete(formExerciseInput, formAutocomplete, () => {});
 
-function openForm(entry) {
+function renderForm(entry) {
   hideCongratsPopup();
-  formReturnScreen = document.querySelector('.screen.active').id;
-  document.getElementById('form-back').onclick = () => showScreen(formReturnScreen);
 
   if (entry && entry.id) {
     document.getElementById('form-title').textContent = 'Edit exercise';
@@ -589,21 +665,41 @@ document.getElementById('f-save').addEventListener('click', async () => {
 
   if (!res.ok) { toast(res.error || 'Could not save', 'error'); return; }
 
+  if (id) {
+    const idx = allEntriesCache.findIndex(e => String(e.id) === String(id));
+    if (idx !== -1) allEntriesCache[idx] = res.data;
+  } else {
+    allEntriesCache.push(res.data);
+  }
+
   if (!id && isNewExercise) {
     exerciseNames.push(exercise_name);
     showCongratsPopup(exercise_name);
-    setTimeout(() => showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen), 4000);
+    setTimeout(() => history.back(), 4000);
   } else {
     toast(id ? 'Entry updated' : 'Entry saved', 'success');
-    showScreen(formReturnScreen === 'screen-form' ? 'screen-home' : formReturnScreen);
+    history.back();
   }
-
-  if (formReturnScreen === 'screen-progression' && currentExercise) openProgression(currentExercise);
-  if (formReturnScreen === 'screen-all') openAllEntries();
 });
 
 /* ---------- INIT ---------- */
-loadExerciseNames();
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingText = document.getElementById('loading-text');
+const loadingRetry = document.getElementById('loading-retry');
+
+async function initialLoad() {
+  loadingOverlay.classList.remove('error', 'hidden');
+  loadingText.textContent = 'Loading your log…';
+  try {
+    await Promise.all([loadExerciseNames(), loadAllEntriesCache()]);
+    loadingOverlay.classList.add('hidden');
+  } catch (err) {
+    loadingOverlay.classList.add('error');
+    loadingText.textContent = "Couldn't load your data. Check your connection.";
+  }
+}
+loadingRetry.addEventListener('click', initialLoad);
+initialLoad();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
