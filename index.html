@@ -464,17 +464,41 @@ window.addEventListener('popstate', (e) => {
 
 /* ---------- EXERCISE NAMES / ENTRIES CACHE ---------- */
 let allEntriesCache = [];
+const STORAGE_KEY = 'ywl_cache_v1';
 
-async function loadExerciseNames() {
-  const res = await apiGet('list_exercise_names');
-  if (!res.ok) throw new Error(res.error || 'Failed to load exercise names');
-  exerciseNames = res.data.exercise_names;
+function deriveExerciseNames() {
+  const names = new Set();
+  allEntriesCache.forEach(e => { if (e.exercise_name) names.add(e.exercise_name); });
+  exerciseNames = Array.from(names);
 }
 
+// Single network call: fetches all entries, then derives the exercise-name
+// list from them locally — avoids a second round trip to Apps Script.
 async function loadAllEntriesCache() {
   const res = await apiGet('list_all_entries');
   if (!res.ok) throw new Error(res.error || 'Failed to load entries');
   allEntriesCache = res.data.entries;
+  deriveExerciseNames();
+  persistCache();
+}
+
+function persistCache() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ entries: allEntriesCache, savedAt: Date.now() }));
+  } catch (err) { /* storage unavailable or full — safe to ignore, it's just a convenience cache */ }
+}
+
+function loadCacheFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    allEntriesCache = parsed.entries || [];
+    deriveExerciseNames();
+    return true;
+  } catch (err) {
+    return false;
+  }
 }
 
 function wireAutocomplete(inputEl, listEl, onPick) {
@@ -579,6 +603,7 @@ function renderEntries(container, entries, refreshFn, emphasizeExercise) {
       const res = await apiPost('delete_entry', { id: entry.id });
       if (res.ok) {
         allEntriesCache = allEntriesCache.filter(e => String(e.id) !== String(entry.id));
+        persistCache();
         toast('Entry deleted', 'success');
         refreshFn();
       } else {
@@ -671,6 +696,7 @@ document.getElementById('f-save').addEventListener('click', async () => {
   } else {
     allEntriesCache.push(res.data);
   }
+  persistCache();
 
   if (!id && isNewExercise) {
     exerciseNames.push(exercise_name);
@@ -687,11 +713,33 @@ const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 const loadingRetry = document.getElementById('loading-retry');
 
+async function fetchWithOneRetry() {
+  try {
+    await loadAllEntriesCache();
+  } catch (err) {
+    await new Promise(r => setTimeout(r, 1200));
+    await loadAllEntriesCache(); // let this one throw if it fails again
+  }
+}
+
 async function initialLoad() {
+  const hadCache = loadCacheFromStorage();
+
+  if (hadCache) {
+    // Show what we already have immediately — no spinner wait — and
+    // quietly refresh in the background. A failed background refresh
+    // just means you're looking at slightly-stale data, not an error.
+    loadingOverlay.classList.add('hidden');
+    fetchWithOneRetry().catch(() => { /* stay on cached data silently */ });
+    return;
+  }
+
+  // No local cache yet (first-ever open) — have to wait on the network,
+  // so show the spinner and a real error if it genuinely fails twice.
   loadingOverlay.classList.remove('error', 'hidden');
   loadingText.textContent = 'Loading your log…';
   try {
-    await Promise.all([loadExerciseNames(), loadAllEntriesCache()]);
+    await fetchWithOneRetry();
     loadingOverlay.classList.add('hidden');
   } catch (err) {
     loadingOverlay.classList.add('error');
