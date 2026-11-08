@@ -19,8 +19,8 @@
     --surface-2: #2E2B28;
     --text: #F2EFE9;
     --text-muted: #9B958C;
-    --accent: #C9A227;
-    --accent-dim: #8A701E;
+    --accent: #D18F9F;
+    --accent-dim: #8F5A68;
     --success: #7C9473;
     --error: #C97757;
     --border: #38352F;
@@ -129,14 +129,18 @@
   .entry-top { display: flex; justify-content: space-between; align-items: baseline; }
   .entry-date { font-size: 13px; color: var(--text-muted); }
   .entry-weight { font-size: 26px; }
+  .date-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: var(--border); }
+  .date-link::after { content: ' ›'; }
+  .exercise-link { cursor: pointer; color: var(--accent); }
+  .exercise-link::after { content: ' ›'; color: var(--accent-dim); }
   .entry-meta { font-size: 14px; color: var(--text-muted); margin-top: 2px; }
   .entry-actions { display: flex; gap: 16px; margin-top: 10px; }
   .entry-actions button {
     background: none; border: none; color: var(--text-muted);
     font-size: 13px; font-family: 'Inter'; padding: 4px 0; cursor: pointer;
   }
-  .entry-actions button.edit { color: var(--accent); }
-  .entry-actions button.delete { color: var(--error); }
+  .entry-actions button.edit { color: var(--text); }
+  .entry-actions button.delete { color: var(--text-muted); }
 
   /* Screens */
   .screen { display: none; }
@@ -156,7 +160,7 @@
   .field { margin-bottom: 14px; }
   .field label {
     display: block; font-size: 13px; color: var(--text-muted);
-    margin-bottom: 6px;
+    margin-bottom: 6px; direction: rtl; text-align: right;
   }
   .field-row { display: flex; gap: 10px; }
   .field-row .field { flex: 1; }
@@ -300,6 +304,15 @@
     <div id="all-list"></div>
   </section>
 
+  <!-- SINGLE DAY -->
+  <section id="screen-day" class="screen">
+    <div class="screen-header">
+      <button class="back-btn" data-back="screen-home">←</button>
+      <h2 class="screen-title" id="day-title">Day</h2>
+    </div>
+    <div id="day-list"></div>
+  </section>
+
   <!-- LOG / EDIT FORM -->
   <section id="screen-form" class="screen">
     <div class="screen-header">
@@ -308,12 +321,12 @@
     </div>
 
     <div class="field">
-      <label>Date</label>
+      <label>תאריך</label>
       <input type="date" id="f-date">
     </div>
 
     <div class="field">
-      <label>Exercise</label>
+      <label>תרגיל</label>
       <div class="search-wrap">
         <input type="text" id="f-exercise" placeholder="Start typing…" autocomplete="off">
         <div class="autocomplete-list" id="form-autocomplete"></div>
@@ -322,29 +335,29 @@
 
     <div class="field-row">
       <div class="field">
-        <label>Weight (kg)</label>
-        <input type="number" id="f-weight" inputmode="decimal" placeholder="0">
+        <label>מספר חזרות</label>
+        <input type="text" id="f-reps" inputmode="tel" pattern="[0-9+]*" placeholder="0 or 5+5">
       </div>
       <div class="field">
-        <label>Reps</label>
-        <input type="text" id="f-reps" inputmode="tel" pattern="[0-9+]*" placeholder="0 or 5+5">
+        <label>משקל (ק״ג)</label>
+        <input type="number" id="f-weight" inputmode="decimal" placeholder="0">
       </div>
     </div>
 
     <div class="field-row">
       <div class="field">
-        <label>Sets</label>
-        <input type="number" id="f-sets" inputmode="numeric" placeholder="0">
+        <label>משקל סט אחרון</label>
+        <input type="number" id="f-last-set" inputmode="decimal" placeholder="0">
       </div>
       <div class="field">
-        <label>Last set weight (optional)</label>
-        <input type="number" id="f-last-set" inputmode="decimal" placeholder="0">
+        <label>מספר סטים</label>
+        <input type="number" id="f-sets" inputmode="numeric" placeholder="0">
       </div>
     </div>
 
     <div class="field">
-      <label>Notes (optional)</label>
-      <input type="text" id="f-notes" placeholder="Anything worth remembering">
+      <label>איך היה?</label>
+      <input type="text" id="f-notes" dir="auto" placeholder="">
     </div>
 
     <input type="hidden" id="f-id">
@@ -366,8 +379,8 @@
 
 <div class="modal-overlay" id="congrats-modal">
   <div class="modal-box">
-    <span class="modal-emoji">🎉</span>
-    <span id="congrats-modal-text">First time logging this exercise — nice work adding it to your list.</span>
+    <span class="modal-emoji">💪</span>
+    <span id="congrats-modal-text">הופה תרגיל חדש! מי זאת?!</span>
   </div>
 </div>
 
@@ -444,6 +457,10 @@ function goToAllEntries() {
   history.pushState({ screen: 'all' }, '');
   renderAllEntries();
 }
+function goToDay(dateKey) {
+  history.pushState({ screen: 'day', date: dateKey }, '');
+  renderDay(dateKey);
+}
 function goToForm(entry) {
   history.pushState({ screen: 'form', entryId: entry && entry.id, exerciseName: entry && entry.exercise_name }, '');
   renderForm(entry);
@@ -454,6 +471,7 @@ window.addEventListener('popstate', (e) => {
   if (!state) { showScreen('screen-home'); return; }
   if (state.screen === 'progression') renderProgression(state.exercise);
   else if (state.screen === 'all') renderAllEntries();
+  else if (state.screen === 'day') renderDay(state.date);
   else if (state.screen === 'form') {
     const entry = state.entryId
       ? allEntriesCache.find(en => String(en.id) === String(state.entryId))
@@ -501,11 +519,41 @@ function loadCacheFromStorage() {
   }
 }
 
+/* ---------- EXERCISE NAME MATCHING (abbreviations) ---------- */
+// Each short form and its full form are treated as the same thing when
+// searching, in both directions. Edit this list to add or remove entries.
+const ABBREVIATIONS = {
+  db: 'dumbbell', bb: 'barbell', kb: 'kettlebell', bw: 'bodyweight',
+  sl: 'single leg', sa: 'single arm', cg: 'close grip', wg: 'wide grip',
+  alt: 'alternating', incl: 'incline', decl: 'decline', rev: 'reverse', ext: 'extension',
+  dl: 'deadlift', rdl: 'romanian deadlift', bss: 'bulgarian split squat',
+  fs: 'front squat', bs: 'back squat', bp: 'bench press', ibp: 'incline bench press',
+  ohp: 'overhead press', sp: 'shoulder press', lp: 'leg press', le: 'leg extension',
+  lc: 'leg curl', ht: 'hip thrust', ghr: 'glute-ham raise', bor: 'bent-over row',
+  bc: 'biceps curl', lr: 'lateral raise', cr: 'calf raise', pu: 'pull-up'
+};
+
+// Lowercases, turns punctuation into spaces, and expands abbreviations word
+// by word, so "SL RDL", "single leg RDL" and "Single-Leg Romanian Deadlift"
+// all come out as "single leg romanian deadlift".
+function canon(str) {
+  return String(str).toLowerCase()
+    .replace(/[^a-z0-9\u0590-\u05FF]+/g, ' ')
+    .trim().split(' ')
+    .map(w => (ABBREVIATIONS[w] || w).replace(/-/g, ' '))
+    .join(' ');
+}
+
+function nameMatches(name, query) {
+  if (name.toLowerCase().includes(query.toLowerCase())) return true;
+  return canon(name).includes(canon(query));
+}
+
 function wireAutocomplete(inputEl, listEl, onPick) {
   inputEl.addEventListener('input', () => {
     const q = inputEl.value.trim().toLowerCase();
     if (!q) { listEl.classList.remove('open'); listEl.innerHTML = ''; return; }
-    const matches = exerciseNames.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
+    const matches = exerciseNames.filter(n => nameMatches(n, q)).slice(0, 8);
     if (!matches.length) { listEl.classList.remove('open'); listEl.innerHTML = ''; return; }
     listEl.innerHTML = matches.map(n => `<div class="autocomplete-item">${escapeHtml(n)}</div>`).join('');
     listEl.classList.add('open');
@@ -556,7 +604,7 @@ function renderProgression(exerciseName) {
   showScreen('screen-progression');
   const listEl = document.getElementById('progression-list');
   const entries = allEntriesCache
-    .filter(e => e.exercise_name === exerciseName)
+    .filter(e => canon(e.exercise_name) === canon(exerciseName))
     .sort((a, b) => new Date(b.date) - new Date(a.date));
   renderEntries(listEl, entries, () => renderProgression(exerciseName));
 }
@@ -569,8 +617,18 @@ function renderAllEntries() {
   renderEntries(listEl, entries, () => renderAllEntries(), true);
 }
 
+/* ---------- SINGLE DAY VIEW ---------- */
+function renderDay(dateKey) {
+  showScreen('screen-day');
+  const entries = allEntriesCache
+    .filter(e => toInputDate(e.date) === dateKey)
+    .sort((a, b) => Number(a.id) - Number(b.id)); // order they were logged = workout order
+  document.getElementById('day-title').textContent = formatDate(entries.length ? entries[0].date : dateKey);
+  renderEntries(document.getElementById('day-list'), entries, () => renderDay(dateKey), true, true);
+}
+
 /* ---------- SHARED ENTRY RENDERING ---------- */
-function renderEntries(container, entries, refreshFn, emphasizeExercise) {
+function renderEntries(container, entries, refreshFn, emphasizeExercise, noDateLink) {
   if (!entries.length) {
     container.innerHTML = '<div class="empty-state"><div class="num">—</div>Nothing logged yet.</div>';
     return;
@@ -579,9 +637,9 @@ function renderEntries(container, entries, refreshFn, emphasizeExercise) {
     <div class="entry-card" data-id="${e.id}">
       <div class="entry-top">
         <div>
-          <div class="entry-date">${formatDate(e.date)}</div>
+          <div class="entry-date${noDateLink ? '' : ' date-link'}"${noDateLink ? '' : ' role="link" tabindex="0"'}>${formatDate(e.date)}</div>
           ${emphasizeExercise
-            ? `<div class="entry-weight">${escapeHtml(e.exercise_name)}</div><div class="entry-meta" style="margin-top:2px">${e.weight_kg} kg</div>`
+            ? `<div class="entry-weight exercise-link" role="link" tabindex="0">${escapeHtml(e.exercise_name)}</div><div class="entry-meta" style="margin-top:2px">${e.weight_kg} kg</div>`
             : `<div class="entry-weight">${e.weight_kg} kg <span style="font-size:14px;color:var(--text-muted);font-family:Inter">${escapeHtml(e.exercise_name)}</span></div>`}
         </div>
       </div>
@@ -597,6 +655,10 @@ function renderEntries(container, entries, refreshFn, emphasizeExercise) {
   container.querySelectorAll('.entry-card').forEach(card => {
     const id = card.dataset.id;
     const entry = entries.find(e => String(e.id) === String(id));
+    const dateLink = card.querySelector('.date-link');
+    if (dateLink) dateLink.addEventListener('click', () => goToDay(toInputDate(entry.date)));
+    const link = card.querySelector('.exercise-link');
+    if (link) link.addEventListener('click', () => goToProgression(entry.exercise_name));
     card.querySelector('.edit').addEventListener('click', () => goToForm(entry));
     card.querySelector('.delete').addEventListener('click', async () => {
       if (!confirm(`Delete this ${entry.exercise_name} entry from ${formatDate(entry.date)}?`)) return;
@@ -616,7 +678,10 @@ function renderEntries(container, entries, refreshFn, emphasizeExercise) {
 function formatDate(d) {
   const dt = new Date(d);
   if (isNaN(dt)) return d;
-  return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const datePart = dt.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  const weekday = dt.toLocaleDateString('en-US', { weekday: 'long' });
+  const workout = [0, 3].includes(dt.getDay()) ? 'POWER' : 'MIX'; // Sunday & Wednesday = POWER
+  return `${datePart} | ${weekday} | ${workout}`;
 }
 
 /* ---------- FORM (CREATE / EDIT) ---------- */
@@ -675,7 +740,7 @@ document.getElementById('f-save').addEventListener('click', async () => {
     return;
   }
 
-  const isNewExercise = !exerciseNames.some(n => n.toLowerCase() === exercise_name.toLowerCase());
+  const isNewExercise = !exerciseNames.some(n => canon(n) === canon(exercise_name));
   const payload = { date, exercise_name, weight_kg, reps, sets, last_set_weight_kg, notes };
 
   let res;
