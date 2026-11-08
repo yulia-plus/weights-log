@@ -415,7 +415,7 @@ const congratsModalText = document.getElementById('congrats-modal-text');
 let congratsTimer = null;
 
 function showCongratsPopup(exerciseName) {
-  congratsModalText.textContent = `First time logging ${exerciseName} — nice work adding it to your list.`;
+  congratsModalText.textContent = `${exerciseName}\nתרגיל חדש? מי זאת!`;
   congratsModal.classList.add('show');
   clearTimeout(congratsTimer);
   congratsTimer = setTimeout(hideCongratsPopup, 4000);
