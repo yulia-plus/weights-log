@@ -1,9 +1,13 @@
-const CACHE_NAME = 'weights-log-v1';
-const SHELL_FILES = ['./index.html', './manifest.json'];
+// Bump this number whenever you want to force every phone to drop its old cache.
+const CACHE_NAME = 'weights-log-v2';
+const SHELL_FILES = ['./index.html', './manifest.json', './icon.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_FILES))
+    caches.open(CACHE_NAME).then((cache) =>
+      // cache: 'reload' bypasses the browser's HTTP cache so we never store a stale copy
+      cache.addAll(SHELL_FILES.map((f) => new Request(f, { cache: 'reload' })))
+    )
   );
   self.skipWaiting();
 });
@@ -17,13 +21,23 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Only cache the app shell itself — never the API calls to Apps Script,
-// so your logged data is always fetched fresh, never served stale.
+// Network first: when you're online you always get the newest version of the
+// app files, and the cached copy is only used as an offline fallback.
+// API calls to Apps Script (a different origin) are never touched, so your
+// logged data is always fetched fresh.
 self.addEventListener('fetch', (event) => {
-  const url = event.request.url;
-  if (url.includes('script.google.com')) return; // let API calls hit the network directly
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(req)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
